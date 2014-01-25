@@ -1,0 +1,8 @@
+Jetze Baumfalk : 3471055
+Barend Poot: 3539784
+
+Questions:
+4.a.i: It's linear in the sense that the the SVM divides the dataset in two parts using a straight line. In practice this means that you can only use a linear SVM (with 100% accuracy) if the data points belonging to each class are not mingled. E.g. if one data point from group A would be surrounded by data points from group B a lSVM wouldn't be able to draw a straight line to discern between group A and group B.
+
+4.b.iii: the initial validation score of the model is 50%.
+4.c.i: the C parameter is a regularization parameter (see http://www.robots.ox.ac.uk/~az/lectures/ml/lect2.pdf slide 16). It basically denotes how strict the SVM should be in enforcing that all the data are on the correct side of the  line. A low C means that we allow for more mistakes to be made, while a high C allows for less mistakes to be made. The reason we sometimes prefer a low C to a high C is that the maximum margin with a low C is larger than with a high C. So with a low C we might have a few more mistakes now, but we will probably have less mistakes when we take more samples compared to a high C.
