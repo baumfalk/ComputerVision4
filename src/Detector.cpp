@@ -146,10 +146,14 @@ void Detector::readPosData(const std::vector<std::string> &pos_train, cv::Mat &p
 	int64 t0 = Utility::get_time_curr_tick();
 	Mat pos_sum;
 
+	vector<Point> locations;
+	vector<float> totalDescriptors;
 	for (size_t f = 0; f < pos_train.size(); ++f)
 	{
+
 		string file = pos_train[f];
 		image = imread(file, CV_LOAD_IMAGE_GRAYSCALE);
+
 		Rect rect = Rect(Point(x1, y1), Point(image.cols - x2, image.rows - y2));
 		assert(rect.area() < image.size().area());
 		Mat features = image(rect);
@@ -194,6 +198,8 @@ void Detector::readPosData(const std::vector<std::string> &pos_train, cv::Mat &p
 		pos_data = pos_data - mv_pos_data;
 		pos_data = pos_data / sv_pos_data;
 	}
+	
+
 
 	// This is the mean model
 	Mat pos_sum1dF = pos_sum.reshape(1, 1);
@@ -201,6 +207,7 @@ void Detector::readPosData(const std::vector<std::string> &pos_train, cv::Mat &p
 
 	normalize(pos_sum1dF.reshape(1, height), pos_sum, 255, 0, NORM_MINMAX);
 	pos_sum.convertTo(_pos_sum8U, CV_8U);
+	
 }
 
 /*
@@ -317,6 +324,7 @@ void Detector::createPyramid(const Mat &image, vector<Mat*> &pyramid)
 	int amount_of_layers = MAX(max_layers, _layer_scale_interval) + _layer_scale_interval;
 	cout << amount_of_layers << " " << _layer_scale_interval << endl;
 
+	//calculate the percentage that the pixel size shrinks each layer
 	double image_shrinkage_per_layer = 1.0 / (pow(2.0, (double)(1.0 / _layer_scale_interval)));
 	cout << image_shrinkage_per_layer << endl;
 	pyramid.push_back(new Mat(image));
@@ -337,6 +345,7 @@ void Detector::createPyramid(const Mat &image, vector<Mat*> &pyramid)
 		Size size;
 		size.height = round(height);
 		size.width = round(width);
+		// no layers smaller than 1
 		if (size.height < 1)
 			size.height = 1;
 		if (size.width < 1)
@@ -346,6 +355,25 @@ void Detector::createPyramid(const Mat &image, vector<Mat*> &pyramid)
 	}
 }
 
+void Detector::pixelsToHOG(Mat & pixels, Mat& hogMat) {
+	hogMat = pixels;
+	HOGDescriptor hog;
+	Mat hogInternal(pixels.rows,pixels.cols,CV_32F);
+	cout << "pixels rows and cols" << pixels.rows << " " << pixels.cols << endl;
+	for (int i = 0; i < pixels.rows; i++) {
+		
+		Mat img;
+		vector<float> descriptors;
+		
+		pixels.convertTo(img, CV_8U);
+		
+		hog.compute(img, descriptors);
+		Mat temp(descriptors);
+		hogInternal.row(i) = temp;
+
+	}
+	//hogMat = hogInternal;
+}
 void Detector::run()
 {
 	assert(FileIO::isFile(_query_image_file));
@@ -383,6 +411,8 @@ void Detector::run()
 	cout << "==============================" << endl;
 	readPosData(pos_train, pos_train_data);
 	readNegData(neg_train, neg_train_data);
+	cout << "pos_train_data rows and cols" << pos_train_data.rows << " " << pos_train_data.cols << endl;
+	cout << "neg_train_data rows and cols" << neg_train_data.rows << " " << neg_train_data.cols << endl;
 	/////////////////////////////////////////////////////////////////////////////
 
 	/////////////////////////// Whitening transformation ////////////////////////
@@ -497,12 +527,16 @@ void Detector::run()
 	else
 		data = train_data;
 
+	// convert the data to HOG
+	Mat hogData;
+	pixelsToHOG(data, hogData);
+
 	// Train the SVM
 	cout << "line:" << __LINE__ << ") Training SVM..." << endl;
-	svm.train(data, labels, Mat(), Mat(), params);
+	svm.train(hogData, labels, Mat(), Mat(), params);
 
 	Mat labels_train;
-	svm.predict(data, labels_train);
+	svm.predict(hogData, labels_train);
 
 	Mat labels_32F;
 	labels.convertTo(labels_32F, CV_32F);

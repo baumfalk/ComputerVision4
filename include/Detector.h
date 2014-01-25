@@ -47,6 +47,7 @@ class Detector
 	void readPosFilelist(std::vector<std::string> &);
 	void readNegFilelist(std::vector<std::string> &);
 
+	void pixelsToHOG(cv::Mat &, cv::Mat &);
 	void readPosData(const std::vector<std::string> &, cv::Mat &);
 	void readNegData(const std::vector<std::string> &, cv::Mat &);
 
