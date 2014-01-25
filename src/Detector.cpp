@@ -310,7 +310,40 @@ void Detector::readNegData(const std::vector<std::string> &neg_train, cv::Mat &n
  */
 void Detector::createPyramid(const Mat &image, vector<Mat*> &pyramid)
 {
+	int max_layers = 1 + floor(
+		log(MIN(image.rows, image.cols) / (double)2 * _target_width) /
+		log(_layer_scale_factor)
+		);
+	int amount_of_layers = MAX(max_layers, _layer_scale_interval) + _layer_scale_interval;
+	cout << amount_of_layers << " " << _layer_scale_interval << endl;
+
+	double image_shrinkage_per_layer = 1.0 / (pow(2.0, (double)(1.0 / _layer_scale_interval)));
+	cout << image_shrinkage_per_layer << endl;
 	pyramid.push_back(new Mat(image));
+
+	double height = image.size().height;
+	double width = image.size().width;
+	
+
+	Mat resizableImage(image);
+	for (int i = 0; i < amount_of_layers-1; i++) {
+		if (i%_layer_scale_interval == 0)
+			cout << i << " " << height << " " << width << endl;
+		height *= image_shrinkage_per_layer;
+		width *= image_shrinkage_per_layer;
+		if (i%_layer_scale_interval == 0)
+			cout << i << " " <<  height << " " << width << endl;
+		Mat smallerImage;
+		Size size;
+		size.height = round(height);
+		size.width = round(width);
+		if (size.height < 1)
+			size.height = 1;
+		if (size.width < 1)
+			size.width = 1;
+		resize(resizableImage, resizableImage, size);
+		pyramid.push_back(new Mat(resizableImage));	
+	}
 }
 
 void Detector::run()
@@ -424,6 +457,12 @@ void Detector::run()
 	Mat val_labels(pos_val_data.rows, 1, CV_32S, Scalar::all(1));
 	val_labels.push_back(Mat(neg_val_data.rows, 1, CV_32S, Scalar::all(-1)));
 	Mat val_gnd = ((val_labels > 0) / 255) * 2 - 1;
+	
+	// add train_gnd
+	Mat train_labels(pos_train_data.rows, 1, CV_32S, Scalar::all(1));
+	train_labels.push_back(Mat(neg_train_data.rows, 1, CV_32S, Scalar::all(-1)));
+	Mat train_gnd = ((train_labels > 0) / 255) * 2 - 1;
+
 	/////////////////////////////////////////////////////////////////////////////
 
 	//////////////////// Test model from mean of images /////////////////////////
@@ -477,19 +516,23 @@ void Detector::run()
 	cout << "\tSupport vector(s): " << sv_count << ", vector-length: " << sv_length << endl;
 
 	CvSVMDecisionFunc* decision = svm.getDecisionFunc();
-	Mat W = Mat::zeros(1, sv_length, CV_64F);
+	Mat W = Mat::zeros(sv_length, 1,CV_64F);
+
 	for (int i = 0; i < sv_count; ++i)
 	{
 		// Compute W from support_vector and decision->alpha
 		const float* support_vector = svm.get_support_vector(i);
-		for (int j = 0; j < sv_length; ++j)
+		for (int j = 0; j < sv_length; ++j) {
 			W.at<double>(0, j) += decision->alpha[i] * support_vector[j];
+			
+		}
+		
 	}
 
 	const double b = -decision->rho;
 	cout << "line:" << __LINE__ << ") bias: " << b << endl;
 
-	/*
+	
 	 {
 	 // Compute the confidence values for training and validation as the distances
 	 // between the sample vectors X and weight vector W, using bias b:
@@ -501,18 +544,31 @@ void Detector::run()
 	 // The confidence value for training should be the same value you get from
 	 // svm.predict(data, labels_train);
 
-	 Mat conf_train = ...;
-	 Mat conf_val = ...;
-	 Mat train_pred = (conf_train > 0) / 255;
-	 Mat val_pred = (conf_val > 0) / 255;
-	 double train_true = train_pred.rows - sum((train_pred == train_gnd) / 255)[0];
-	 double train_pct = (train_true / (double) train_pred.rows) * 100.0;
-	 double val_true = val_pred.rows - sum((val_pred == val_gnd) / 255)[0];
-	 double val_pct = (val_true / (double) val_pred.rows) * 100.0;
-	 cout << "\tTraining correct: " << train_pct << "%" << endl;
-	 cout << "\tValidation correct: " << val_pct << "%" << endl;
-	 }
-	 */
+	//Mat W_transposed;
+	///transpose(W, W_transposed);
+	
+	Mat conf_train = train_data*W+b;
+	Mat conf_val = val_data *W+b;
+	flip(conf_train, conf_train, 0);
+	flip(conf_val, conf_val, 0);
+	Mat train_pred = (conf_train > 0) / 255;
+	Mat val_pred = (conf_val > 0) / 255;
+	
+	svm.predict(data, labels_train);
+	Mat labels_train_pred = (labels_train > 0) / 255;
+
+	double labels_train_true = labels_train_pred.rows - sum((labels_train_pred == train_gnd) / 255)[0];
+	double label_train_pct = 100-(labels_train_true / (double)labels_train_pred.rows) * 100.0;
+
+	double train_true = train_pred.rows - sum((train_pred == train_gnd) / 255)[0];
+	double train_pct = 100-(train_true / (double) train_pred.rows) * 100.0;
+	double val_true = val_pred.rows - sum((val_pred == val_gnd) / 255)[0];
+	double val_pct = 100-(val_true / (double) val_pred.rows) * 100.0;
+	cout << "\tTraining correct: " << train_pct << "%" << endl;
+	cout << "\tsvm predict correct:" << label_train_pct << "%" << endl;
+	cout << "\tValidation correct: " << val_pct << "%" << endl;
+	}
+	 
 
 	best_W = W;
 	best_b = b;
@@ -576,6 +632,9 @@ void Detector::run()
 		string etf = Utility::show_fancy_etf(layer, pyramid.size(), 1, t0, fps);
 		if (!etf.empty()) cout << etf << endl;
 
+		// from now on the layers are too small to be useful.
+		if (pyramid.at(layer)->cols - _model_size.width < 1 || pyramid.at(layer)->rows - _model_size.height < 1)
+			break;
 		// Generate subwindow locations
 		Range rx(0, pyramid.at(layer)->cols - _model_size.width);
 		Range ry(0, pyramid.at(layer)->rows - _model_size.height);
@@ -588,7 +647,7 @@ void Detector::run()
 		vector<int> Xv(px, px + X1.total()), Yv(py, py + Y1.total());
 		Xvs.insert(make_pair(layer, Xv));
 		Yvs.insert(make_pair(layer, Yv));
-
+	
 		// Extract subwindows from image for detection
 		Mat sub_windows;
 		Mat mv_sub_data, sv_sub_data;
@@ -609,7 +668,7 @@ void Detector::run()
 			sv_sub_data.push_back(std_line);
 			sub_windows.push_back(sub1dF);
 		}
-
+		
 		if (_do_equalizing)
 		{
 			// Equalize image (subtract mean, divide by stddev)
@@ -628,6 +687,15 @@ void Detector::run()
 		 *
 		 * Mat detect = ...;
 		 */
+		
+
+		// doesn't work flawlessly
+	/*	Mat W_transposed;
+		transpose(W, W_transposed);
+		Mat detect = sub_windows*W_transposed +b;
+		flip(detect, detect, 0);*/
+
+
 		Mat detect(sub_windows.rows, 1, CV_64F);
 		for (int i = 0; i < sub_windows.rows; ++i)
 		{
@@ -639,7 +707,7 @@ void Detector::run()
 
 			detect.at<double>(i, 0) = (double) svm.predict(sub1dF, true);
 		}
-
+		
 		// Show detection results as a heatmap of most likely face locations for this pyramid layer
 		Mat face_locations = Mat(detect.t()).reshape(detect.channels(),
 				(pyramid.at(layer)->size().height - _model_size.height) + 1);

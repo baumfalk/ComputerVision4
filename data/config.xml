@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <settings seed="50">
-	<images amount="128" factor="1" width="20">
+	<images amount="200" factor="1" width="20">
 		<examples size="400" />
 		<pos>
 			<path regx=".*"><!-- last character of the path should be a slash '/'! -->
@@ -112,7 +112,7 @@
 	</images>
 	<svm>
 		<params>
-			<C>10</C>
+			<C>2</C>
 			<max_count>100000</max_count>
 			<epsilon>0.000001</epsilon>
 		</params>
