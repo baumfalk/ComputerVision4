@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <settings seed="50">
-	<images amount="200" factor="1" width="20">
+	<images amount="200" factor="1" width="24">
 		<examples size="400" />
 		<pos>
 			<path regx=".*"><!-- last character of the path should be a slash '/'! -->

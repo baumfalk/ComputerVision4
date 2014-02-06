@@ -11,3 +11,8 @@ Questions:
 4.c.iv.1: equalize makes sure that the sub windows don't deviate too much from the average.
 whiten equalizes that the white-balance of the sub-windows , so that shadows don't play that much as a role.
 5.c Actually, the performance becomes (slightly) worse. The bounding boxes are  now of different sizes and are sometimes placed on wrong areas. This is especially the case for the larger bounding boxes. Another thing to notice is that even though we have 120 layers, layer 85 to 120 are all of size 1 by 1. Furthermore, around layer 34 the equation pyramid.at(layer)->cols - _model_size.width becomes negative, so only layer 1 through 34 are used.
+6d & e:We got the following result
+
+        Training correct: 99.75%
+        Validation correct: 98.5%
+		
